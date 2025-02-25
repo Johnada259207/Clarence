@@ -8,7 +8,6 @@ from dotenv import load_dotenv
 # Load environment variables from .env
 load_dotenv()
 
-# Read the key from environment variable
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 if not DEEPSEEK_API_KEY:
     print("Warning: DEEPSEEK_API_KEY not found in environment variables.")
@@ -86,9 +85,9 @@ def chat():
             resources = resources[:5]
             resource_text = "\n".join([f"{org} - {desc}" for org, desc in resources])
 
-    # Build the system instructions
+    # Build the system instructions — we call the AI "Clarence"
     system_instructions = (
-        "You are a helpful AI assistant. Maintain conversation context using the messages below.\n"
+        "You are Clarence, a helpful clinical AI assistant. Maintain conversation context using the messages below.\n"
         "If the user is asking about resources, only use the provided resource data. If not, be conversational.\n\n"
         "IMPORTANT: Return your response as valid JSON with two keys: \"topic\" and \"answer\".\n"
         "Example:\n"
