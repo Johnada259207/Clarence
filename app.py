@@ -1,7 +1,7 @@
 import os
 import sqlite3
 import json
-import openai  # <-- Use standard openai library
+import openai  # Standard openai library
 from flask import Flask, render_template, request, jsonify, session
 from dotenv import load_dotenv
 
@@ -16,9 +16,8 @@ if not DEEPSEEK_API_KEY:
 openai.api_key = DEEPSEEK_API_KEY
 openai.api_base = "https://api.deepseek.com"  # If your DeepSeek endpoint is truly openai-compatible
 
-# Models you plan to use
-RESOURCE_MODEL = "deepseek-reasoner"
-CONVERSATION_MODEL = "deepseek-chat"
+# Use only the deepseek-chat model for all queries
+CHAT_MODEL = "deepseek-chat"
 
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "supersecretkey")
@@ -81,7 +80,7 @@ def chat():
     if is_resource_query:
         resources = fetch_all_resources()
         if resources:
-            # Limit to top 5 to avoid super-long responses
+            # Limit to top 5 to avoid super-long answers
             resources = resources[:5]
             resource_text = "\n".join([f"{org} - {desc}" for org, desc in resources])
 
@@ -109,30 +108,22 @@ def chat():
         messages.append(msg)
     messages.append({"role": "user", "content": user_context})
 
-    # Choose model
-    model_to_use = RESOURCE_MODEL if is_resource_query else CONVERSATION_MODEL
-
-    # Helper to call the openai ChatCompletion endpoint
-    def call_deepseek(model_name, msg_list):
+    # We now always use deepseek-chat
+    def call_deepseek(msg_list):
         return openai.ChatCompletion.create(
-            model=model_name,
+            model=CHAT_MODEL,
             messages=msg_list,
             max_tokens=600  # Adjust as needed
         )
 
-    # Try the primary model
+    # Try the single model call
     try:
-        response = call_deepseek(model_to_use, messages)
+        response = call_deepseek(messages)
         assistant_raw = response.choices[0].message.content
     except Exception as e:
-        print(f"Error with DeepSeek API (primary call): {e}")
-        # Fallback: try the conversation model
-        try:
-            fallback_response = call_deepseek(CONVERSATION_MODEL, messages)
-            assistant_raw = fallback_response.choices[0].message.content
-        except Exception as e2:
-            print(f"Error with fallback call: {e2}")
-            assistant_raw = '{"topic": "Error", "answer": "Sorry, I am having trouble responding right now."}'
+        print(f"Error with DeepSeek API: {e}")
+        # If it fails, produce an error JSON
+        assistant_raw = '{"topic": "Error", "answer": "Sorry, I am having trouble responding right now."}'
 
     # Parse the JSON
     topic, answer = parse_json_assistant_response(assistant_raw)
@@ -152,9 +143,7 @@ def parse_json_assistant_response(raw_text):
     topic = session.get("current_topic", "General Conversation")
     answer = "Sorry, I couldn't parse the response."
 
-    # Remove stray backticks
     cleaned_text = raw_text.replace("```", "").strip()
-
     try:
         start_idx = cleaned_text.find("{")
         end_idx = cleaned_text.rfind("}")
@@ -164,7 +153,6 @@ def parse_json_assistant_response(raw_text):
             topic = data.get("topic", topic)
             answer = data.get("answer", answer)
         else:
-            # If we can't find braces, treat the entire text as the answer
             answer = cleaned_text
     except Exception as e:
         print(f"JSON parse error: {e}")
