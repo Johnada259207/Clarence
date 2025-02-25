@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Clinician AI Assistant</title>
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+  <style>
+    body {
+      background-color: #f8f9fa;
+      font-family: Arial, sans-serif;
+    }
+    .chat-container {
+      max-width: 600px;
+      margin: 40px auto;
+      background: #fff;
+      border-radius: 10px;
+      padding: 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .chat-history {
+      height: 350px;
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      padding: 15px;
+      border-radius: 5px;
+      background: #ffffff;
+      margin-bottom: 15px;
+    }
+    .message {
+      margin-bottom: 15px;
+      display: flex;
+    }
+    .message.user {
+      justify-content: flex-end;
+    }
+    .message.user .message-text {
+      background: #007bff;
+      color: #fff;
+      padding: 10px 15px;
+      border-radius: 15px;
+      max-width: 70%;
+      text-align: right;
+    }
+    .message.assistant .message-text {
+      background: #e9ecef;
+      color: #333;
+      padding: 10px 15px;
+      border-radius: 15px;
+      max-width: 70%;
+      text-align: left;
+    }
+    .topic-bar {
+      margin-bottom: 15px;
+      padding: 10px;
+      background: #f1f1f1;
+      border-radius: 5px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    #topicName {
+      font-weight: bold;
+      color: #007bff;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="chat-container">
+      <h3 class="text-center mb-4">Clinician AI Assistant</h3>
+
+      <!-- Topic Bar -->
+      <div class="topic-bar">
+        <div>
+          <span>Current Topic: </span><span id="topicName">{{ current_topic }}</span>
+        </div>
+        <button id="resetTopicButton" class="btn btn-sm btn-warning">Reset Topic</button>
+      </div>
+
+      <div id="chatHistory" class="chat-history"></div>
+      <form id="queryForm">
+        <div class="input-group">
+          <input type="text" id="query" name="query" class="form-control" placeholder="Type your query or use voice..." required>
+          <div class="input-group-append">
+            <button type="submit" class="btn btn-primary">Send</button>
+            <button type="button" id="recordButton" class="btn btn-secondary" title="Click to speak">🎤</button>
+            <button type="button" id="callButton" class="btn btn-success" title="Placeholder for calls">📞</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    let recognition;
+    const recordButton = document.getElementById("recordButton");
+
+    // Check browser support
+    if ('webkitSpeechRecognition' in window) {
+      recognition = new webkitSpeechRecognition();
+    } else if ('SpeechRecognition' in window) {
+      recognition = new SpeechRecognition();
+    } else {
+      // Not supported: disable mic button
+      recordButton.disabled = true;
+      recordButton.title = "Speech recognition not supported in this browser.";
+    }
+
+    function speakResponse(text) {
+      const speech = new SpeechSynthesisUtterance(text);
+      speech.rate = 1;
+      speech.pitch = 1;
+      speech.lang = "en-US";
+      window.speechSynthesis.speak(speech);
+    }
+
+    function addMessage(sender, text) {
+      const chatHistory = document.getElementById("chatHistory");
+      const messageElem = document.createElement("div");
+      messageElem.classList.add("message", sender);
+
+      const bubble = document.createElement("div");
+      bubble.classList.add("message-text");
+      bubble.innerText = text;
+
+      messageElem.appendChild(bubble);
+      chatHistory.appendChild(messageElem);
+      chatHistory.scrollTop = chatHistory.scrollHeight;
+
+      if (sender === "assistant") {
+        speakResponse(text);
+      }
+    }
+
+    document.getElementById("queryForm").addEventListener("submit", function(e) {
+      e.preventDefault();
+      const query = document.getElementById("query").value.trim();
+      if (!query) return;
+
+      addMessage("user", query);
+      document.getElementById("query").value = "";
+
+      fetch("/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: "query=" + encodeURIComponent(query)
+      })
+      .then(response => response.json())
+      .then(data => {
+        addMessage("assistant", data.response);
+        if (data.topic) {
+          document.getElementById("topicName").innerText = data.topic;
+        }
+      });
+    });
+
+    // Speech recognition logic
+    if (recordButton && recognition) {
+      recordButton.addEventListener("click", function() {
+        recognition.start();
+      });
+
+      recognition.onresult = function(event) {
+        const transcript = event.results[0][0].transcript;
+        document.getElementById("query").value = transcript;
+      };
+
+      recognition.onerror = function(event) {
+        console.error("Speech recognition error:", event.error);
+      };
+
+      recognition.onend = function() {
+        console.log("Speech recognition ended.");
+      };
+    }
+
+    document.getElementById("callButton").addEventListener("click", function() {
+      alert("Voice call functionality not yet implemented.");
+    });
+
+    // Reset Topic
+    document.getElementById("resetTopicButton").addEventListener("click", function() {
+      fetch("/reset_topic", { method: "POST" })
+        .then(response => response.json())
+        .then(data => {
+          document.getElementById("topicName").innerText = data.current_topic;
+          // Clear the chat UI
+          document.getElementById("chatHistory").innerHTML = "";
+        });
+    });
+  </script>
+</body>
+</html>
